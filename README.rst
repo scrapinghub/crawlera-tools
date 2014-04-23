@@ -10,7 +10,18 @@ crawlera-bench
 ``crawlera-bench`` can be used to benchmark Crawlera with your domain. It needs
 a file with a list of urls (one per line)::
 
+Quick start::
+
+    $ wget https://raw.githubusercontent.com/scrapinghub/crawlera-tools/master/crawlera-bench
+    $ chmod a+x crawlera-bench
+
+Usage::
+
     crawlera-bench urls.txt -u USER -p PASSWORD
+
+For more usage info see::
+
+    crawlera-bench -h
 
 The output would something like this::
 
@@ -37,9 +48,5 @@ The output would something like this::
     2014-04-23 17:29:58 www.somesite.com                   0    51     0     0     0     0     0     0  |     0.974    6.083
     2014-04-23 17:29:59 www.somesite.com                   0    38     0     0     0     0     0     0  |     0.980   42.102
     2014-04-23 17:30:00 www.somesite.com                   0    54     0     0     0     0     0     0  |     0.663   14.737
-
-For more information on supported arguments use::
-
-    crawlera-bench -h
 
 .. _Crawlera service: http://crawlera.com/
