@@ -8,7 +8,7 @@ crawlera-bench
 --------------
 
 ``crawlera-bench`` can be used to benchmark Crawlera with your domain. It needs
-a file with a list of urls (one per line)::
+a file with a list of urls (one per line).
 
 Quick start::
 
@@ -48,5 +48,14 @@ The output would something like this::
     2014-04-23 17:29:58 www.somesite.com                   0    51     0     0     0     0     0     0  |     0.974    6.083
     2014-04-23 17:29:59 www.somesite.com                   0    38     0     0     0     0     0     0  |     0.980   42.102
     2014-04-23 17:30:00 www.somesite.com                   0    54     0     0     0     0     0     0  |     0.663   14.737
+
+Some columns may require an explanation such as:
+
+* ``2xx``, ``3xx``, ... : requests with response code in the 2xx, 3xx, ... range
+* ``all``  : all requests combined
+* ``t/o``  : requests that timed out
+* ``err``  : requests with errors (connection or HTTP errors)
+* ``minw`` : minimum request wait time found in the last interval
+* ``maxw`` : maximum request wait time found in the last interval
 
 .. _Crawlera service: http://crawlera.com/
