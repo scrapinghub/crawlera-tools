@@ -1,0 +1,97 @@
+#!/usr/bin/env python
+
+import sys, argparse, logging, base64, requests, time
+from urlparse import urlparse
+from datetime import datetime
+from collections import defaultdict
+from threading import Thread, Lock
+from Queue import Queue
+
+logger = logging.getLogger('crawlera-bench')
+
+def parse_args():
+    p = argparse.ArgumentParser(description="Crawlera benchmarking tool")
+    p.add_argument("urlsfile", help="File with URLs to try")
+    p.add_argument("-u", dest="user", help="Crawlera username")
+    p.add_argument("-p", dest="password", help="Crawlera password")
+    p.add_argument("-c", dest="concurrency", type=int, default=100, help="concurrency. Default: %(default)s")
+    p.add_argument("-t", dest="timeout", type=int, default=120, help="timeout (in seconds) Default: %(default)s")
+    p.add_argument("-i", dest="interval", type=int, default=1, help="report interval. Default: %(default)s")
+    p.add_argument("-e", dest="estimate", action="store_true", help="show req/min estimate instead of actual requests")
+    return p.parse_args()
+
+def worker_request(allstats, statslock, queue, user, password, timeout, m):
+    headers = {}
+    headers["proxy-authorization"] = "Basic " + base64.urlsafe_b64encode("%s:%s" % (user, password))
+    while True:
+        url = queue.get()
+        netloc = urlparse(url).netloc # TODO: we should get this from crawlera
+        stats = allstats[netloc]
+        t = time.time()
+        try:
+            r = requests.get(url, proxies={"http": "proxy.crawlera.com:8010"}, timeout=timeout, headers=headers)
+            if r.status_code == 503:
+                rk = 'r503'
+            else:
+                rk = 'r%d' % (r.status_code / 100)
+            with statslock:
+                stats[rk] += m
+        except requests.Timeout:
+            stats["t"] += m
+        except Exception:
+            stats["e"] += m
+        finally:
+            wait = time.time() - t
+            with statslock:
+                stats["minw"] = min(wait, stats.get("minw", sys.maxint))
+                stats["maxw"] = max(wait, stats["maxw"])
+            queue.task_done()
+
+def dumpstats(allstats, statslock, args):
+    print "Concurrency     : %d" % args.concurrency
+    print "Timeout         : %d sec" % args.timeout
+    print "Report interval : %d sec" % args.interval
+    unit = "requests per minute (est)" if args.estimate else "requests per %d sec" % args.interval 
+    print "Unit            : %s" % unit
+    print
+    hdr = "time                netloc                           all   2xx   3xx   4xx   5xx   503   t/o   err  |      minw     maxw"
+    print hdr
+    while True:
+        time.sleep(args.interval)
+        with statslock:
+            for netloc, stats in sorted(allstats.items()):
+                stats["netloc"] = netloc
+                stats["time"] = datetime.utcnow().replace(microsecond=0)
+                print "%(time)16s %(netloc)-30s %(r)5d %(r2)5d %(r3)5d %(r4)5d %(r5)5d %(r503)5d %(t)5d %(e)5d  |   %(minw)7.3f  %(maxw)7.3f" % stats
+                stats.clear()
+
+def main():
+    args = parse_args()
+
+    logging.basicConfig()
+    logging.getLogger('requests').setLevel(logging.ERROR)
+
+    allstats = defaultdict(lambda: defaultdict(int))
+    statslock = Lock()
+
+    queue = Queue(maxsize=1)
+
+    m = 60 / float(args.interval) if args.estimate else 1
+
+    for _ in range(args.concurrency):
+        t = Thread(target=worker_request, args=(allstats, statslock, queue, args.user, args.password, args.timeout, m))
+        t.daemon = True
+        t.start()
+
+    t = Thread(target=dumpstats, args=(allstats, statslock, args))
+    t.daemon = True
+    t.start()
+        
+    with open(args.urlsfile) as f:
+        for line in f:
+            queue.put(line.rstrip())
+
+    queue.join()
+
+if __name__ == "__main__":
+    main()
