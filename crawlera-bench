@@ -21,15 +21,22 @@ def parse_args():
     return p.parse_args()
 
 def worker_request(allstats, statslock, queue, user, password, timeout, m):
+
+    from requests.auth import HTTPProxyAuth
+
     headers = {}
-    headers["proxy-authorization"] = "Basic " + base64.urlsafe_b64encode("%s:%s" % (user, password))
+    auth = HTTPProxyAuth(user, password)
     while True:
         url = queue.get()
         netloc = urlparse(url).netloc # TODO: we should get this from crawlera
         stats = allstats[netloc]
         t = time.time()
         try:
-            r = requests.get(url, proxies={"http": "proxy.crawlera.com:8010"}, timeout=timeout, headers=headers)
+            r = requests.get(url,
+                             proxies={"http": "http://proxy.crawlera.com:8010"},
+                             timeout=timeout,
+                             auth=auth,
+                             allow_redirects=False)
             if r.status_code == 503:
                 rk = 'r503'
             else:
@@ -52,7 +59,7 @@ def dumpstats(allstats, statslock, args):
     print "Concurrency     : %d" % args.concurrency
     print "Timeout         : %d sec" % args.timeout
     print "Report interval : %d sec" % args.interval
-    unit = "requests per minute (est)" if args.estimate else "requests per %d sec" % args.interval 
+    unit = "requests per minute (est)" if args.estimate else "requests per %d sec" % args.interval
     print "Unit            : %s" % unit
     print
     hdr = "time                netloc                           all   2xx   3xx   4xx   5xx   503   t/o   err  |      minw     maxw"
@@ -87,7 +94,7 @@ def main():
     t = Thread(target=dumpstats, args=(allstats, statslock, args))
     t.daemon = True
     t.start()
-        
+
     with open(args.urlsfile) as f:
         for line in f:
             queue.put(line.rstrip())
