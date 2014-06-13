@@ -29,8 +29,12 @@ def worker_request(allstats, statslock, queue, user, password, timeout, m):
         netloc = urlparse(url).netloc # TODO: we should get this from crawlera
         stats = allstats[netloc]
         t = time.time()
+        if url.startswith("https:"):
+            url = "http://" + url[8:]
+            headers["x-crawlera-use-https"] = "1"
         try:
             r = requests.get(url,
+                             headers=headers,
                              proxies={"http": "http://proxy.crawlera.com:8010"},
                              timeout=timeout,
                              auth=auth,
