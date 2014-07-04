@@ -15,15 +15,17 @@ def parse_args():
     p.add_argument("urlsfile", help="File with URLs to try")
     p.add_argument("-u", dest="user", help="Crawlera username")
     p.add_argument("-p", dest="password", help="Crawlera password")
+    p.add_argument("-H", dest="host", help="Crawlera host (default: %(default)s)", default="proxy.crawlera.com")
     p.add_argument("-c", dest="concurrency", type=int, default=100, help="concurrency. Default: %(default)s")
     p.add_argument("-t", dest="timeout", type=int, default=120, help="timeout (in seconds) Default: %(default)s")
     p.add_argument("-i", dest="interval", type=int, default=1, help="report interval. Default: %(default)s")
     p.add_argument("-e", dest="estimate", action="store_true", help="show req/min estimate instead of actual requests")
     return p.parse_args()
 
-def worker_request(allstats, statslock, queue, user, password, timeout, m):
+def worker_request(allstats, statslock, queue, user, password, host, timeout, m):
     headers = {}
     auth = HTTPProxyAuth(user, password)
+    proxies = {"http": "http://%s:8010/" % host}
     while True:
         url = queue.get()
         netloc = urlparse(url).netloc # TODO: we should get this from crawlera
@@ -35,7 +37,7 @@ def worker_request(allstats, statslock, queue, user, password, timeout, m):
         try:
             r = requests.get(url,
                              headers=headers,
-                             proxies={"http": "http://proxy.crawlera.com:8010"},
+                             proxies=proxies,
                              timeout=timeout,
                              auth=auth,
                              allow_redirects=False)
@@ -58,6 +60,7 @@ def worker_request(allstats, statslock, queue, user, password, timeout, m):
             queue.task_done()
 
 def dumpstats(allstats, statslock, args):
+    print "Host            : %s" % args.host
     print "Concurrency     : %d" % args.concurrency
     print "Timeout         : %d sec" % args.timeout
     print "Report interval : %d sec" % args.interval
@@ -89,7 +92,7 @@ def main():
     m = 60 / float(args.interval) if args.estimate else 1
 
     for _ in range(args.concurrency):
-        t = Thread(target=worker_request, args=(allstats, statslock, queue, args.user, args.password, args.timeout, m))
+        t = Thread(target=worker_request, args=(allstats, statslock, queue, args.user, args.password, args.host, args.timeout, m))
         t.daemon = True
         t.start()
 
