@@ -27,22 +27,15 @@ def parse_args():
 
 
 def worker_request(
-    allstats,
-    statslock,
-    queue,
-    user,
-    password,
-    host,
-    timeout,
-    run_time,
-    start_time,
-    m):
+        allstats, statslock, queue, user, password,
+        host, timeout, run_time, start_time, m):
+
     headers = {}
     auth = HTTPProxyAuth(user, password)
     proxies = {"http": "http://%s:8010/" % host}
     while True:
         url = queue.get()
-        netloc = urlparse(url).netloc  # TODO: we should get this from crawlera
+        netloc = urlparse(url).netloc # TODO: we should get this from crawlera
         stats = allstats[netloc]
         t = time.time()
 
@@ -115,16 +108,8 @@ def main():
         t = Thread(
             target=worker_request,
             args=(
-                allstats,
-                statslock,
-                queue,
-                args.user,
-                args.password,
-                args.host,
-                args.timeout,
-                args.run_time,
-                start_time,
-                m))
+                allstats, statslock, queue, args.user, args.password,
+                args.host, args.timeout, args.run_time, start_time, m))
         t.daemon = True
         t.start()
     t = Thread(target=dumpstats, args=(allstats, statslock, args))
