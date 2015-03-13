@@ -29,8 +29,6 @@ def parse_args():
 def worker_request(
         allstats, statslock, queue, user, password,
         host, timeout, run_time, start_time, m):
-
-    headers = {}
     auth = HTTPProxyAuth(user, password)
     proxies = {"http": "http://%s:8010/" % host}
     while True:
@@ -44,7 +42,9 @@ def worker_request(
             os._exit(1)
         if url.startswith("https:"):
             url = "http://" + url[8:]
-            headers["x-crawlera-use-https"] = "1"
+            headers = {"x-crawlera-use-https": "1"}
+        else:
+            headers = {}
         try:
             r = requests.get(url,
                              headers=headers,
