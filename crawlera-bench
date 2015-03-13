@@ -44,7 +44,9 @@ def worker_request(
             os._exit(1)
         if url.startswith("https:"):
             url = "http://" + url[8:]
-            headers["x-crawlera-use-https"] = "1"
+            headers = {"x-crawlera-use-https": "1"}
+        else:
+            headers = {}
         try:
             r = requests.get(url,
                              headers=headers,
