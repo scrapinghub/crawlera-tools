@@ -41,10 +41,13 @@ def worker_request(
 
         # Exit bench after a given amount of time.
         if run_time is not 0 and t - start_time > run_time:
+            print "Killing the bench", run_time
+            print "Start time", start_time, t-start_time
             os._exit(1)
-        if url.startswith("https:"):
-            url = "http://" + url[8:]
-            headers["x-crawlera-use-https"] = "1"
+        # if url.startswith("https:"):
+        #     url = "http://" + url[8:]
+        #     headers["x-crawlera-use-https"] = "1"
+        headers = {}
         try:
             r = requests.get(url,
                              headers=headers,
