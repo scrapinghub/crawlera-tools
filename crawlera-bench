@@ -32,10 +32,10 @@ def worker_request(
 
     headers = {}
     auth = HTTPProxyAuth(user, password)
-    proxies = {"http": "http://%s:8010/" % host}
+    proxies = {"https": "http://%s:8010/" % host, }
     while True:
         url = queue.get()
-        netloc = urlparse(url).netloc # TODO: we should get this from crawlera
+        netloc = urlparse(url).netloc  # TODO: we should get this from crawlera
         stats = allstats[netloc]
         t = time.time()
 
@@ -44,17 +44,17 @@ def worker_request(
             print "Killing the bench", run_time
             print "Start time", start_time, t-start_time
             os._exit(1)
-        # if url.startswith("https:"):
-        #     url = "http://" + url[8:]
-        #     headers["x-crawlera-use-https"] = "1"
         headers = {}
         try:
-            r = requests.get(url,
-                             headers=headers,
-                             proxies=proxies,
-                             timeout=timeout,
-                             auth=auth,
-                             allow_redirects=False)
+
+            r = requests.get(
+                url,
+                headers=headers,
+                proxies=proxies,
+                timeout=timeout,
+                auth=auth,
+                allow_redirects=False,
+                verify='/usr/share/ca-certificates/extra/crawlera-ca.crt')
             if r.status_code == 503:
                 rk = 'r503'
             else:
@@ -92,6 +92,7 @@ def dumpstats(allstats, statslock, args):
                 stats["time"] = datetime.utcnow().replace(microsecond=0)
                 print "%(time)16s %(netloc)-30s %(r)5d %(r2)5d %(r3)5d %(r4)5d %(r5)5d %(r503)5d %(t)5d %(e)5d  |   %(minw)7.3f  %(maxw)7.3f" % stats
                 stats.clear()
+
 
 def main():
     start_time = time.time()
