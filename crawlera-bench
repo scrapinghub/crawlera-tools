@@ -32,7 +32,8 @@ def worker_request(
 
     headers = {}
     auth = HTTPProxyAuth(user, password)
-    proxies = {"https": "http://%s:8010/" % host, }
+    proxies = {"https": "http://%s:8010/" % host,
+               "http": "http://%s:8010/" % host}
     while True:
         url = queue.get()
         netloc = urlparse(url).netloc  # TODO: we should get this from crawlera
@@ -46,7 +47,6 @@ def worker_request(
             os._exit(1)
         headers = {}
         try:
-
             r = requests.get(
                 url,
                 headers=headers,
