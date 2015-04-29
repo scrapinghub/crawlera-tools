@@ -10,6 +10,7 @@ from requests.auth import HTTPProxyAuth
 
 logger = logging.getLogger('crawlera-bench')
 
+
 def parse_args():
     p = argparse.ArgumentParser(description="Crawlera benchmarking tool")
     p.add_argument("urlsfile", help="File with URLs to try")
@@ -23,35 +24,48 @@ def parse_args():
     p.add_argument(
         "-r", dest="run_time", type=int,
         default=0, help="define time of benchmark run in seconds, 0 unlimited")
+    p.add_argument(
+        "--ca-cert", dest="certificate",
+        help="link to Crawlera CA certificate (allows to use CONNECT method "
+             "for https requests). If not provided 'x-crawlera-use-https' "
+             "header is used instead of CONNECT",
+        default=False,
+        )
     return p.parse_args()
 
 
 def worker_request(
-        allstats, statslock, queue, user, password,
+        allstats, statslock, queue, user, password, certificate,
         host, timeout, run_time, start_time, m):
     auth = HTTPProxyAuth(user, password)
-    proxies = {"http": "http://%s:8010/" % host}
+    proxies = {"https": "http://%s:8010/" % host,
+               "http": "http://%s:8010/" % host}
     while True:
+        headers = {}
         url = queue.get()
-        netloc = urlparse(url).netloc # TODO: we should get this from crawlera
+        netloc = urlparse(url).netloc  # TODO: we should get this from crawlera
         stats = allstats[netloc]
         t = time.time()
 
         # Exit bench after a given amount of time.
         if run_time is not 0 and t - start_time > run_time:
+            print "Stopping the benchmark", run_time
+            print "Start time", start_time, t-start_time
             os._exit(1)
-        if url.startswith("https:"):
-            url = "http://" + url[8:]
-            headers = {"x-crawlera-use-https": "1"}
-        else:
-            headers = {}
+
+        if not certificate and url.startswith("https"):
+            url = url.replace("https://", "http://", 1)
+            headers["x-crawlera-use-https"] = 1
+
         try:
-            r = requests.get(url,
-                             headers=headers,
-                             proxies=proxies,
-                             timeout=timeout,
-                             auth=auth,
-                             allow_redirects=False)
+            r = requests.get(
+                url,
+                headers=headers,
+                proxies=proxies,
+                timeout=timeout,
+                auth=auth,
+                allow_redirects=False,
+                verify=certificate)
             if r.status_code == 503:
                 rk = 'r503'
             else:
@@ -90,16 +104,15 @@ def dumpstats(allstats, statslock, args):
                 print "%(time)16s %(netloc)-30s %(r)5d %(r2)5d %(r3)5d %(r4)5d %(r5)5d %(r503)5d %(t)5d %(e)5d  |   %(minw)7.3f  %(maxw)7.3f" % stats
                 stats.clear()
 
+
 def main():
     start_time = time.time()
     args = parse_args()
-
     logging.basicConfig()
     logging.getLogger('requests').setLevel(logging.ERROR)
 
     allstats = defaultdict(lambda: defaultdict(int))
     statslock = Lock()
-
     queue = Queue(maxsize=1)
 
     m = 60 / float(args.interval) if args.estimate else 1
@@ -109,7 +122,8 @@ def main():
             target=worker_request,
             args=(
                 allstats, statslock, queue, args.user, args.password,
-                args.host, args.timeout, args.run_time, start_time, m))
+                args.certificate, args.host, args.timeout,
+                args.run_time, start_time, m))
         t.daemon = True
         t.start()
     t = Thread(target=dumpstats, args=(allstats, statslock, args))
