@@ -10,6 +10,7 @@ from requests.auth import HTTPProxyAuth
 
 logger = logging.getLogger('crawlera-bench')
 
+
 def parse_args():
     p = argparse.ArgumentParser(description="Crawlera benchmarking tool")
     p.add_argument("urlsfile", help="File with URLs to try")
@@ -23,16 +24,22 @@ def parse_args():
     p.add_argument(
         "-r", dest="run_time", type=int,
         default=0, help="define time of benchmark run in seconds, 0 unlimited")
+    p.add_argument(
+        "--ca-cert", dest="certificate",
+        help="link to ca-certificate",
+        default=False,
+        )
     return p.parse_args()
 
 
 def worker_request(
-        allstats, statslock, queue, user, password,
+        allstats, statslock, queue, user, password, certificate,
         host, timeout, run_time, start_time, m):
     auth = HTTPProxyAuth(user, password)
     proxies = {"https": "http://%s:8010/" % host,
                "http": "http://%s:8010/" % host}
     while True:
+        headers = {}
         url = queue.get()
         netloc = urlparse(url).netloc  # TODO: we should get this from crawlera
         stats = allstats[netloc]
@@ -43,7 +50,11 @@ def worker_request(
             print "Killing the bench", run_time
             print "Start time", start_time, t-start_time
             os._exit(1)
-        headers = {}
+
+        if not certificate and url.startswith("https"):
+            url = url.replace("https://", "http://", 1)
+            headers["x-crawlera-use-https"] = 1
+
         try:
             r = requests.get(
                 url,
@@ -52,7 +63,7 @@ def worker_request(
                 timeout=timeout,
                 auth=auth,
                 allow_redirects=False,
-                verify='/usr/share/ca-certificates/extra/crawlera-ca.crt')
+                verify=certificate)
             if r.status_code == 503:
                 rk = 'r503'
             else:
@@ -95,13 +106,11 @@ def dumpstats(allstats, statslock, args):
 def main():
     start_time = time.time()
     args = parse_args()
-
     logging.basicConfig()
     logging.getLogger('requests').setLevel(logging.ERROR)
 
     allstats = defaultdict(lambda: defaultdict(int))
     statslock = Lock()
-
     queue = Queue(maxsize=1)
 
     m = 60 / float(args.interval) if args.estimate else 1
@@ -111,7 +120,8 @@ def main():
             target=worker_request,
             args=(
                 allstats, statslock, queue, args.user, args.password,
-                args.host, args.timeout, args.run_time, start_time, m))
+                args.certificate, args.host, args.timeout,
+                args.run_time, start_time, m))
         t.daemon = True
         t.start()
     t = Thread(target=dumpstats, args=(allstats, statslock, args))
