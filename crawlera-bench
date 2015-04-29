@@ -29,8 +29,6 @@ def parse_args():
 def worker_request(
         allstats, statslock, queue, user, password,
         host, timeout, run_time, start_time, m):
-
-    headers = {}
     auth = HTTPProxyAuth(user, password)
     proxies = {"https": "http://%s:8010/" % host,
                "http": "http://%s:8010/" % host}
