@@ -2,6 +2,7 @@
 
 import sys, argparse, logging, requests, time, os
 from urlparse import urlparse
+from random import choice
 from datetime import datetime
 from collections import defaultdict
 from threading import Thread, Lock
@@ -48,13 +49,20 @@ def parse_args():
     p.add_argument("--log-level", type=set_log_level, nargs='?',
                    help="Set log level (use INFO to add more information)",
                    const="ERROR")
-
+    p.add_argument(
+        "--add-header", dest="headers", action="append", nargs="*",
+        help="Allows to add a header (or list of headers) to requests. "
+             "You can add as many headers as you need. Expects headers in "
+             "the following format HeaderName:option1,option2,option3 "
+             "If a list of values is specified for a header, then a value "
+             "for a single request is selected randomly from that list. "
+             "Sample usage: --add-header 'X-Crawlera-UA:pass,desktop,mobile'")
     return p.parse_args()
 
 
 def worker_request(
         allstats, statslock, queue, user, password, certificate,
-        host, timeout, run_time, start_time, m):
+        host, timeout, run_time, start_time, m, extra_headers):
     auth = HTTPProxyAuth(user, password)
     proxies = {"https": "http://%s:8010/" % host,
                "http": "http://%s:8010/" % host}
@@ -74,6 +82,10 @@ def worker_request(
         if not certificate and url.startswith("https"):
             url = url.replace("https://", "http://", 1)
             headers["x-crawlera-use-https"] = 1
+
+        if extra_headers:
+            for key, values in extra_headers.items():
+                headers[key] = choice(values)
         try:
             r = requests.get(
                 url,
@@ -130,9 +142,18 @@ def dumpstats(allstats, statslock, args):
                 stats.clear()
 
 
+def parse_headers(headers_array):
+    headers = {}
+    for header_str in headers_array:
+        header, values = header_str[0].split(":")
+        headers[header] = values.split(",")
+    return headers
+
+
 def main():
     start_time = time.time()
     args = parse_args()
+    headers = parse_headers(args.headers)
     allstats = defaultdict(lambda: defaultdict(int))
     statslock = Lock()
     queue = Queue(maxsize=1)
@@ -145,7 +166,7 @@ def main():
             args=(
                 allstats, statslock, queue, args.user, args.password,
                 args.certificate, args.host, args.timeout,
-                args.run_time, start_time, m))
+                args.run_time, start_time, m, headers))
         t.daemon = True
         t.start()
     t = Thread(target=dumpstats, args=(allstats, statslock, args))
