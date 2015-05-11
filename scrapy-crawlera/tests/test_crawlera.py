@@ -6,7 +6,7 @@ from scrapy.spider import Spider
 from scrapy.utils.test import get_crawler
 from twisted.internet.error import ConnectionRefusedError
 
-from scrapylib.crawlera import CrawleraMiddleware
+from scrapy_crawlera import CrawleraMiddleware
 import os
 
 
