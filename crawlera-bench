@@ -144,7 +144,7 @@ def dumpstats(allstats, statslock, args):
 
 def parse_headers(headers_array):
     headers = {}
-    for header_str in headers_array:
+    for header_str in headers_array or []:
         header, values = header_str[0].split(":")
         headers[header] = values.split(",")
     return headers
