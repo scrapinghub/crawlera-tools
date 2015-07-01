@@ -12,7 +12,7 @@ logger = logging.getLogger('crawlera-bench')
 logger.setLevel(level=logging.ERROR)
 
 
-def add_file_handler(file_path):
+def log_to_file(file_path):
     stream_handler = logging.FileHandler(file_path)
     logger.addHandler(stream_handler)
 
@@ -41,7 +41,7 @@ def parse_args():
              "header is used instead of CONNECT",
         default=False,
         )
-    p.add_argument("--add-file-handler", type=add_file_handler, nargs='?',
+    p.add_argument("--log-to-file", type=log_to_file, nargs='?',
                    help="Allows to store verbose requests/errors information "
                    " in logfile",
                    const="/tmp/benchmark_log")
