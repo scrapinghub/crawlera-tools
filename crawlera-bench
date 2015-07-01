@@ -9,6 +9,16 @@ from Queue import Queue
 from requests.auth import HTTPProxyAuth
 
 logger = logging.getLogger('crawlera-bench')
+logger.setLevel(level=logging.ERROR)
+
+
+def log_to_file(file_path):
+    stream_handler = logging.FileHandler(file_path)
+    logger.addHandler(stream_handler)
+
+
+def set_log_level(level):
+    logger.setLevel(level=level)
 
 
 def parse_args():
@@ -31,6 +41,14 @@ def parse_args():
              "header is used instead of CONNECT",
         default=False,
         )
+    p.add_argument("--log-to-file", type=log_to_file, nargs='?',
+                   help="Allows to store verbose requests/errors information "
+                   " in logfile",
+                   const="/tmp/benchmark_log")
+    p.add_argument("--log-level", type=set_log_level, nargs='?',
+                   help="Set log level (use INFO to add more information)",
+                   const="ERROR")
+
     return p.parse_args()
 
 
@@ -56,7 +74,6 @@ def worker_request(
         if not certificate and url.startswith("https"):
             url = url.replace("https://", "http://", 1)
             headers["x-crawlera-use-https"] = 1
-
         try:
             r = requests.get(
                 url,
@@ -68,14 +85,22 @@ def worker_request(
                 verify=certificate)
             if r.status_code == 503:
                 rk = 'r503'
+                logger.error("503 from url:{}, headers: {}"
+                             .format(url, headers))
             else:
                 rk = 'r%d' % (r.status_code / 100)
+                logger.info("{}: url:{}, headers:{}"
+                            .format(r.status_code, url, headers))
             with statslock:
                 stats[rk] += m
         except requests.Timeout:
             stats["t"] += m
+            logger.error("Timeout from url:{}, headers: {}"
+                         .format(url, headers))
         except Exception:
             stats["e"] += m
+            logger.error("{} from url:{}, headers: {}"
+                         .format(sys.exc_info(), url, headers))
         finally:
             wait = time.time() - t
             with statslock:
@@ -108,9 +133,6 @@ def dumpstats(allstats, statslock, args):
 def main():
     start_time = time.time()
     args = parse_args()
-    logging.basicConfig()
-    logging.getLogger('requests').setLevel(logging.ERROR)
-
     allstats = defaultdict(lambda: defaultdict(int))
     statslock = Lock()
     queue = Queue(maxsize=1)
