@@ -51,23 +51,19 @@ def parse_args():
                    const="ERROR")
     p.add_argument(
         "--add-header", dest="headers", action="append", nargs="*",
-        help="Allows to add a header (or list of headers) to requests. "
-             "You can add as many headers as you need. Expects headers in "
-             "the following format HeaderName:option1,option2,option3 "
-             "If a list of values is specified for a header, then a value "
-             "for a single request is selected randomly from that list. "
-             "Sample usage: --add-header 'X-Crawlera-UA:pass,desktop,mobile'")
+        help="Allows to add a header (or list of headers) to requests. The"
+             "following format of a header is expected: HeaderName:HeaderValue"
+             "Sample usage: --add-header 'X-Crawlera-UA:mobile'")
     return p.parse_args()
 
 
 def worker_request(
         allstats, statslock, queue, user, password, certificate,
-        host, timeout, run_time, start_time, m, extra_headers):
+        host, timeout, run_time, start_time, m, headers):
     auth = HTTPProxyAuth(user, password)
     proxies = {"https": "http://%s:8010/" % host,
                "http": "http://%s:8010/" % host}
     while True:
-        headers = {}
         url = queue.get()
         netloc = urlparse(url).netloc  # TODO: we should get this from crawlera
         stats = allstats[netloc]
@@ -83,9 +79,6 @@ def worker_request(
             url = url.replace("https://", "http://", 1)
             headers["x-crawlera-use-https"] = 1
 
-        if extra_headers:
-            for key, values in extra_headers.items():
-                headers[key] = choice(values)
         try:
             r = requests.get(
                 url,
@@ -143,10 +136,14 @@ def dumpstats(allstats, statslock, args):
 
 
 def parse_headers(headers_array):
+    """
+    Parses headers argument (from following format:
+    [['HeaderName1:Value1'], ['HeaderName2:Value2']]) into a dictionary
+    """
     headers = {}
     for header_str in headers_array or []:
-        header, values = header_str[0].split(":")
-        headers[header] = values.split(",")
+        header, value = header_str[0].split(":")
+        headers[header] = value
     return headers
 
 
