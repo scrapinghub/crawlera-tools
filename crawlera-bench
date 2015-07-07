@@ -59,11 +59,12 @@ def parse_args():
 
 def worker_request(
         allstats, statslock, queue, user, password, certificate,
-        host, timeout, run_time, start_time, m, headers):
+        host, timeout, run_time, start_time, m, extra_headers):
     auth = HTTPProxyAuth(user, password)
     proxies = {"https": "http://%s:8010/" % host,
                "http": "http://%s:8010/" % host}
     while True:
+        headers = extra_headers.copy()
         url = queue.get()
         netloc = urlparse(url).netloc  # TODO: we should get this from crawlera
         stats = allstats[netloc]
