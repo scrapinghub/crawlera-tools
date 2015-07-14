@@ -2,7 +2,6 @@
 
 import sys, argparse, logging, requests, time, os
 from urlparse import urlparse
-from random import choice
 from datetime import datetime
 from collections import defaultdict
 from threading import Thread, Lock
