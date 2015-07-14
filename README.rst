@@ -21,7 +21,8 @@ Usage::
         crawlera-bench urls.txt -u USER -p PASSWORD
 
     Options:
-        --add-header <header>:<value> - allows to add a given http header to all requests. It's possible to specify multiple different headers by repeating --add-header option with other header:value (options with same <header> value will be overriden).
+        --add-header <header>:<value> - allows to add a given http header to all requests.
+        It's possible to specify multiple different headers by repeating --add-header option with other header:value (options with same <header> value will be overriden).
 
 For more usage info see::
 
