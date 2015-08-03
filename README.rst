@@ -58,10 +58,11 @@ Some columns may require an explanation such as:
 * ``minw`` : minimum request wait time found in the last interval
 * ``maxw`` : maximum request wait time found in the last interval
 
-scrapy-crawlera
----------------
+Other tools available
+---------------------
 
-A Crawlera middleware for Scrapy. See scrapy-crawlera/README.rst for more details.
+* `scrapy-crawlera`_: A Scrapy downloader middleware for Crawlera
 
 
 .. _Crawlera service: http://crawlera.com/
+.. _scrapy-crawlera: https://github.com/scrapinghub/scrapy-crawlera
