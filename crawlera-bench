@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 
-import sys, argparse, logging, requests, time, os
+import argparse
+import logging
+import time
 from urlparse import urlparse
 from datetime import datetime
 from collections import defaultdict
-from threading import Thread, Lock
-from Queue import Queue
+from itertools import cycle
+
 from requests.auth import HTTPProxyAuth
+
+import grequests
 
 logger = logging.getLogger('crawlera-bench')
 logger.setLevel(level=logging.ERROR)
@@ -51,109 +55,72 @@ def parse_args():
     return p.parse_args()
 
 
-def worker_request(
-        allstats, statslock, queue, user, password, certificate,
-        host, timeout, run_time, start_time, m):
-    auth = HTTPProxyAuth(user, password)
-    proxies = {"https": "http://%s:8010/" % host,
-               "http": "http://%s:8010/" % host}
-    while True:
-        headers = {}
-        url = queue.get()
-        netloc = urlparse(url).netloc  # TODO: we should get this from crawlera
-        stats = allstats[netloc]
-        t = time.time()
-
-        # Exit bench after a given amount of time.
-        if run_time is not 0 and t - start_time > run_time:
-            print "Stopping the benchmark", run_time
-            print "Start time", start_time, t-start_time
-            os._exit(1)
-
-        if not certificate and url.startswith("https"):
-            url = url.replace("https://", "http://", 1)
-            headers["x-crawlera-use-https"] = 1
-        try:
-            r = requests.get(
-                url,
-                headers=headers,
-                proxies=proxies,
-                timeout=timeout,
-                auth=auth,
-                allow_redirects=False,
-                verify=certificate)
-            if r.status_code == 503:
-                rk = 'r503'
-                logger.error("503 from url:{}, headers: {}"
-                             .format(url, headers))
-            else:
-                rk = 'r%d' % (r.status_code / 100)
-                logger.info("{}: url:{}, headers:{}"
-                            .format(r.status_code, url, headers))
-            with statslock:
-                stats[rk] += m
-        except requests.Timeout:
-            stats["t"] += m
-            logger.error("Timeout from url:{}, headers: {}"
-                         .format(url, headers))
-        except Exception:
-            stats["e"] += m
-            logger.error("{} from url:{}, headers: {}"
-                         .format(sys.exc_info(), url, headers))
-        finally:
-            wait = time.time() - t
-            with statslock:
-                stats["r"] += m
-                stats["minw"] = min(wait, stats.get("minw", sys.maxint))
-                stats["maxw"] = max(wait, stats["maxw"])
-            queue.task_done()
-
-
-def dumpstats(allstats, statslock, args):
-    print "Host            : %s" % args.host
-    print "Concurrency     : %d" % args.concurrency
-    print "Timeout         : %d sec" % args.timeout
-    print "Report interval : %d sec" % args.interval
+def print_header(args):
+    print("Host            : %s" % args.host)
+    print("Concurrency     : %d" % args.concurrency)
+    print("Timeout         : %d sec" % args.timeout)
+    print("Report interval : %d sec" % args.interval)
     unit = "requests per minute (est)" if args.estimate else "requests per %d sec" % args.interval
-    print "Unit            : %s" % unit
-    print
+    print("Unit            : %s" % unit)
+    print("")
     hdr = "time                netloc                           all   2xx   3xx   4xx   5xx   503   t/o   err  |      minw     maxw"
-    print hdr
-    while True:
-        time.sleep(args.interval)
-        with statslock:
-            for netloc, stats in sorted(allstats.items()):
-                stats["netloc"] = netloc
-                stats["time"] = datetime.utcnow().replace(microsecond=0)
-                print "%(time)16s %(netloc)-30s %(r)5d %(r2)5d %(r3)5d %(r4)5d %(r5)5d %(r503)5d %(t)5d %(e)5d  |   %(minw)7.3f  %(maxw)7.3f" % stats
-                stats.clear()
+    print(hdr)
+
+
+def refresh_stats(allstats):
+    for netloc, stats in sorted(allstats.items()):
+        stats["netloc"] = netloc
+        stats["time"] = datetime.utcnow().replace(microsecond=0)
+        print "%(time)16s %(netloc)-30s %(r)5d %(r2)5d %(r3)5d %(r4)5d %(r5)5d %(r503)5d %(t)5d %(e)5d  |   %(minw)7.3f  %(maxw)7.3f" % stats
 
 
 def main():
-    start_time = time.time()
     args = parse_args()
-    allstats = defaultdict(lambda: defaultdict(int))
-    statslock = Lock()
-    queue = Queue(maxsize=1)
-
-    m = 60 / float(args.interval) if args.estimate else 1
-
-    for _ in range(args.concurrency):
-        t = Thread(
-            target=worker_request,
-            args=(
-                allstats, statslock, queue, args.user, args.password,
-                args.certificate, args.host, args.timeout,
-                args.run_time, start_time, m))
-        t.daemon = True
-        t.start()
-    t = Thread(target=dumpstats, args=(allstats, statslock, args))
-    t.daemon = True
-    t.start()
     with open(args.urlsfile) as f:
-        for line in f:
-            queue.put(line.rstrip())
-    queue.join()
+        urls = [line.strip() for line in f]
+
+    print_header(args)
+
+    auth = HTTPProxyAuth(args.user, args.password)
+    start_time = time.time()
+    proxies = {"https": "http://%s:8010/" % args.host,
+               "http": "http://%s:8010/" % args.host}
+
+    t = time.time()
+    urls_iterator = cycle(urls)
+    allstats = defaultdict(lambda: defaultdict(int))
+    
+    def exception_handler(request, exception):
+        logger.error("request {} encountered exception {}".format(request, exception))
+    
+    while t - start_time < args.run_time:
+        t = time.time()
+        reqs = []
+        for i in range(args.concurrency):
+            url = urls_iterator.next()
+            headers = {}
+            if not args.certificate and url.startswith("https"):
+                url = url.replace("https://", "http://", 1)
+                headers["x-crawlera-use-https"] = 1
+
+            req = grequests.get(url,
+                                headers=headers,
+                                proxies=proxies,
+                                timeout=args.timeout,
+                                auth=auth,
+                                allow_redirects=False)
+
+            reqs.append(req)
+
+        responses = grequests.map(reqs, exception_handler=exception_handler)
+        for r in responses:
+            netloc = urlparse(url).netloc  # TODO: we should get this from crawlera
+            allstats[netloc]["r{}".format(r.status_code / 100)] += 1
+        refresh_stats(allstats)
+
+    print("Stopping the benchmark", args.run_time)
+    print("Start time", start_time, t-start_time)
+
 
 if __name__ == "__main__":
     main()
